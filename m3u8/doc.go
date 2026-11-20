@@ -63,6 +63,34 @@ Example 2: Parsing of a master playlist
 	_ = p.DecodeFrom(bufio.NewReader(f), true)
 	fmt.Printf("Playlist object: %+v\n", p)
 
+## Event timeline from EXT-X-DATERANGE
+
+Live media playlists are reloaded on a timer, and their sliding window drops
+old segments together with the EXT-X-DATERANGE tags that advertised ads or
+chapters. The same tag can therefore be seen in several consecutive reloads,
+but an application wants one Start, possibly some Updates and one End event per
+range, on the program clock.
+
+Keep one [EventTimeline] for the lifetime of a stream and feed it every
+reloaded [MediaPlaylist] with [EventTimeline.Update]. It merges date ranges by
+ID across reloads, preserves CLASS and the client-defined X- attributes,
+resolves END-DATE, DURATION and END-ON-NEXT ends, and maps each event onto the
+EXT-X-DISCONTINUITY-SEQUENCE of the media playing at its program time.
+
+	timeline := m3u8.NewEventTimeline()
+	// for each reloaded playlist:
+	events, err := timeline.Update(mediaPlaylist)
+	for _, ev := range events { // ev.Type is EventStart, EventUpdate or EventEnd
+		fmt.Println(ev.Type, ev.At, ev.Range.ID)
+	}
+
+Ranges that have left the window stay tracked, so an ID never starts twice;
+state is pruned once an ended range lies entirely before the window, and a
+count bound keeps the state finite on very long-lived streams. With
+[WithStrictTimeline], missing program dates, invalid intervals, conflicting
+duplicate IDs and backwards-moving windows are returned wrapped in the Err*
+sentinel errors; without it, the offending ranges are skipped instead.
+
 [grafov/m3u8]: https://github.com/grafov/m3u8
 [rfc8216]: https://tools.ietf.org/html/rfc8216
 [rfc8216bis]: https://tools.ietf.org/html/draft-pantos-rfc8216bis

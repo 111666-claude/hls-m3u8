@@ -52,6 +52,23 @@ For writing, there are `Encode` methods that return a `*bytes.Buffer`. This buff
 It is also possible to call `EncodeWithSkip` to signal skipping of the first `n` segments.
 The `String` method makes it easy to use the standard `fmt.Print` functions.
 
+A live media playlist is reloaded again and again, and its sliding window drops old segments
+together with their `EXT-X-DATERANGE` tags. An `EventTimeline` merges the date ranges of
+consecutive reloads and emits one Start, optional Update and one End `TimelineEvent` per range ID
+on the program clock, keeping `CLASS` and the client-defined `X-` attributes and mapping each
+event to an `EXT-X-DISCONTINUITY-SEQUENCE`. Keep one instance per stream and feed it every
+reloaded playlist:
+
+```go
+timeline := m3u8.NewEventTimeline()
+events, err := timeline.Update(mediaPlaylist) // call once per reload
+```
+
+With `WithStrictTimeline`, missing program dates, invalid intervals, conflicting duplicate IDs
+and backwards-moving windows return the `Err*` sentinel errors; without it, the offending ranges
+are skipped. Ranges that left the window stay tracked, so a range never starts twice, while
+pruning and a count bound keep the tracked state finite.
+
 ## Installation / Usage
 
 This is a library that should be downloaded like other Go code.
